@@ -1,9 +1,9 @@
 CONTEXT FOR AI MODEL
-Generated from: C:\Users\fcarella\IdeaProjects\csd230\w26\lecture-2-11-2-starter-fred-carella
-Timestamp: 2026-03-11-12-34
+Generated from: C:\Users\fcarella\IdeaProjects\csd230\w26\lecture-2-12-V3\lecture-2-12-csd230-w26-fred-carella
+Timestamp: 2026-03-11-15-17
 
 --- PROJECT STRUCTURE ---
-|-- lecture-2-11-2-starter-fred-carella/
+|-- lecture-2-12-csd230-w26-fred-carella/
     |-- .files2ignore
     |-- .gitattributes
     |-- .gitignore
@@ -25,6 +25,8 @@ Timestamp: 2026-03-11-12-34
             |-- vite.svg
         |-- README.md
         |-- src/
+            |-- api/
+                |-- axiosConfig.js
             |-- App.css
             |-- App.jsx
             |-- Book.jsx
@@ -36,10 +38,18 @@ Timestamp: 2026-03-11-12-34
             |-- MagazineForm.jsx
             |-- main.jsx
             |-- NavBar.jsx
+            |-- pages/
+                |-- Login.jsx
+                |-- Logout.jsx
+            |-- provider/
+                |-- authProvider.jsx
+            |-- routes/
+                |-- ProtectedRoute.jsx
         |-- vite.config.js
     |-- mvnw
     |-- mvnw.cmd
     |-- pom.xml
+    |-- README.md
     |-- src/
         |-- main/
             |-- java/
@@ -3807,6 +3817,31 @@ If you are developing a production application, we recommend using TypeScript wi
 
 ```
 
+--- FILE: frontend/src/api/axiosConfig.js ---
+```
+import axios from 'axios';
+const api = axios.create({
+    baseURL: '/api/rest'
+});
+
+// Axios Interceptor: Runs right before ANY request is sent
+api.interceptors.request.use(
+    (config) => {
+        // Dynamically grab the token right when the request fires
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+export default api;
+```
+
 --- FILE: frontend/src/App.css ---
 ```
 #root {
@@ -3856,30 +3891,33 @@ If you are developing a production application, we recommend using TypeScript wi
 
 --- FILE: frontend/src/App.jsx ---
 ```
-import { useState, useEffect } from 'react'
-import { Routes, Route } from 'react-router'
-import axios from 'axios'
-import Navbar from './NavBar'
-import Home from './Home'
-import Book from './Book'
-import BookForm from './BookForm'
-import Magazine from './Magazine'
-import MagazineForm from './MagazineForm'
-import Cart from './Cart'
-import './App.css'
-
-// Centralized Axios Configuration
-const api = axios.create({
-    baseURL: '/api/rest'
-});
-
+import { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router';
+import Navbar from './NavBar';
+import Home from './Home';
+import Book from './Book';
+import BookForm from './BookForm';
+import Magazine from './Magazine';
+import MagazineForm from './MagazineForm';
+import Cart from './Cart';
+import Login from './pages/Login';       // NEW
+import Logout from './pages/Logout';     // NEW
+import { ProtectedRoute } from './routes/ProtectedRoute'; // NEW
+import { useAuth } from './provider/authProvider';        // NEW
+import api from './api/axiosConfig';     // NEW
+import './App.css';
 function App() {
+    const { token } = useAuth(); // Get auth state
     const [books, setBooks] = useState([]);
-    const [magazines, setMagazines] = useState([]);
+    const[magazines, setMagazines] = useState([]);
     const [cartCount, setCartCount] = useState(0);
     const [loading, setLoading] = useState(true);
-
     useEffect(() => {
+        // If no token exists, don't attempt to fetch secure data
+        if (!token) {
+            setLoading(false);
+            return;
+        }
         const loadInitialData = async () => {
             try {
                 const [booksRes, magsRes, cartRes] = await Promise.all([
@@ -3890,15 +3928,15 @@ function App() {
                 setBooks(booksRes.data);
                 setMagazines(magsRes.data);
                 setCartCount(cartRes.data.products.length);
-                setLoading(false);
             } catch (err) {
                 console.error("Failed to load data", err);
+            } finally {
+                setLoading(false);
             }
         };
         loadInitialData();
-    }, []);
-
-    const handleAddToCart = async (productId) => {
+    }, [token]); // Re-run fetch when token changes (i.e., on login)
+    const handleAddToCart = async (productId) => { /* keeping your existing code */
         try {
             const res = await api.post(`/cart/add/${productId}`);
             setCartCount(res.data.products.length);
@@ -3907,58 +3945,61 @@ function App() {
             alert("Error adding to cart");
         }
     };
-
-    const handleDeleteBook = async (id) => {
+    const handleDeleteBook = async (id) => { /* keeping your existing code */
         if (!window.confirm("Delete book?")) return;
         await api.delete(`/books/${id}`);
         setBooks(books.filter(b => b.id !== id));
     };
-
-    const handleUpdateBook = async (id, data) => {
+    const handleUpdateBook = async (id, data) => { /* keeping your existing code */
         const res = await api.put(`/books/${id}`, data);
         setBooks(books.map(b => b.id === id ? res.data : b));
     };
-
     if (loading) return <h2>Loading Bookstore...</h2>;
-
     return (
         <div className="app-container">
-            <Navbar cartCount={cartCount} />
+            {/* Only show Navbar if logged in */}
+            {token && <Navbar cartCount={cartCount} />}
+            
             <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/inventory" element={
-                    <div className="book-list">
-                        <h1>Books</h1>
-                        {books.map(b => (
-                            <Book key={b.id} {...b}
-                                  onDelete={handleDeleteBook}
-                                  onUpdate={handleUpdateBook}
-                                  onAddToCart={handleAddToCart} />
-                        ))}
-                    </div>
-                } />
-                <Route path="/magazines" element={
-                    <div className="magazine-list">
-                        <h1>Magazines</h1>
-                        {magazines.map(m => (
-                            <Magazine key={m.id} {...m}
-                                      onAddToCart={handleAddToCart}
-                                      onDelete={(id) => api.delete(`/magazines/${id}`).then(() => setMagazines(magazines.filter(mag => mag.id !== id)))}
-                                      onUpdate={(id, data) => api.put(`/magazines/${id}`, data).then(res => setMagazines(magazines.map(mag => mag.id === id ? res.data : mag)))}
-                            />
-                        ))}
-                    </div>
-                } />
-                <Route path="/cart" element={<Cart api={api} onCartChange={(count) => setCartCount(count)} />} />
-                <Route path="/add" element={<BookForm onBookAdded={(b) => setBooks([...books, b])} api={api} />} />
-                <Route path="/add-magazine" element={<MagazineForm onMagazineAdded={(m) => setMagazines([...magazines, m])} api={api} />} />
+                {/* 1. PUBLIC ROUTES */}
+                <Route path="/login" element={<Login />} />
+                
+                {/* 2. PROTECTED ROUTES */}
+                <Route element={<ProtectedRoute />}>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/inventory" element={
+                        <div className="book-list">
+                            <h1>Books</h1>
+                            {books.map(b => (
+                                <Book key={b.id} {...b}
+                                      onDelete={handleDeleteBook}
+                                      onUpdate={handleUpdateBook}
+                                      onAddToCart={handleAddToCart} />
+                            ))}
+                        </div>
+                    } />
+                    <Route path="/magazines" element={
+                        <div className="magazine-list">
+                            <h1>Magazines</h1>
+                            {magazines.map(m => (
+                                <Magazine key={m.id} {...m}
+                                          onAddToCart={handleAddToCart}
+                                          onDelete={(id) => api.delete(`/magazines/${id}`).then(() => setMagazines(magazines.filter(mag => mag.id !== id)))}
+                                          onUpdate={(id, data) => api.put(`/magazines/${id}`, data).then(res => setMagazines(magazines.map(mag => mag.id === id ? res.data : mag)))}
+                                />
+                            ))}
+                        </div>
+                    } />
+                    <Route path="/cart" element={<Cart api={api} onCartChange={(count) => setCartCount(count)} />} />
+                    <Route path="/add" element={<BookForm onBookAdded={(b) => setBooks([...books, b])} api={api} />} />
+                    <Route path="/add-magazine" element={<MagazineForm onMagazineAdded={(m) => setMagazines([...magazines, m])} api={api} />} />
+                    <Route path="/logout" element={<Logout />} />
+                </Route>
             </Routes>
         </div>
-    )
+    );
 }
-
 export default App;
-
 
 ```
 
@@ -4346,25 +4387,25 @@ export default MagazineForm;
 ```
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router' // Import the Router
+import { BrowserRouter } from 'react-router'
+import AuthProvider from './provider/authProvider' // NEW
 import './index.css'
 import App from './App.jsx'
-
 createRoot(document.getElementById('root')).render(
     <StrictMode>
-        <BrowserRouter>
-            <App />
-        </BrowserRouter>
+        <AuthProvider>
+            <BrowserRouter>
+                <App />
+            </BrowserRouter>
+        </AuthProvider>
     </StrictMode>,
 )
-
 
 ```
 
 --- FILE: frontend/src/NavBar.jsx ---
 ```
 import { Link } from 'react-router';
-
 function Navbar({ cartCount }) {
     return (
         <nav className="navbar">
@@ -4374,12 +4415,140 @@ function Navbar({ cartCount }) {
             <Link to="/cart">🛒 Cart ({cartCount})</Link>
             <Link to="/add">➕ Add Book</Link>
             <Link to="/add-magazine">➕ Add Magazine</Link>
+            <Link to="/logout" style={{ color: "#ff4444", marginLeft: "auto" }}>🚪 Logout</Link>
         </nav>
     );
 }
-
 export default Navbar;
 
+```
+
+--- FILE: frontend/src/pages/Login.jsx ---
+```
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../provider/authProvider";
+import api from "../api/axiosConfig";
+const Login = () => {
+    const { setToken } = useAuth();
+    const navigate = useNavigate();
+    
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        try {
+            // Call the Spring Boot AuthController
+            const res = await api.post("/auth/login", { email, password });
+            
+            // Save the JWT to context
+            setToken(res.data.token);
+            
+            // Redirect to home page
+            navigate("/", { replace: true });
+        } catch (err) {
+            setError("Invalid credentials. Please try again.");
+        }
+    };
+    return (
+        <div style={{ textAlign: "center", marginTop: "50px" }}>
+            <h2>Sign In to Bookstore Admin</h2>
+            {error && <p style={{ color: "red" }}>{error}</p>}
+            
+            <form onSubmit={handleLogin} style={{ display: "inline-block", textAlign: "left" }}>
+                <div style={{ marginBottom: "10px" }}>
+                    <label>Username:</label><br/>
+                    <input type="text" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <small style={{display:"block", color:"#888"}}>Hint: try 'admin'</small>
+                </div>
+                <div style={{ marginBottom: "10px" }}>
+                    <label>Password:</label><br/>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </div>
+                <button type="submit" style={{ width: "100%" }}>Login</button>
+            </form>
+        </div>
+    );
+};
+export default Login;
+
+```
+
+--- FILE: frontend/src/pages/Logout.jsx ---
+```
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../provider/authProvider";
+const Logout = () => {
+    const { setToken } = useAuth();
+    const navigate = useNavigate();
+    useEffect(() => {
+        // Clear the token and redirect immediately
+        setToken(null);
+        navigate("/login", { replace: true });
+    }, [setToken, navigate]);
+    return <div>Logging out...</div>;
+};
+export default Logout;
+
+```
+
+--- FILE: frontend/src/provider/authProvider.jsx ---
+```
+import { createContext, useContext, useMemo, useState } from "react";
+
+const AuthContext = createContext();
+
+const AuthProvider = ({ children }) => {
+    const [token, setToken_] = useState(localStorage.getItem("token"));
+
+    const setToken = (newToken) => {
+        setToken_(newToken);
+        // Synchronously update localStorage so the Axios Interceptor sees it immediately
+        if (newToken) {
+            localStorage.setItem("token", newToken);
+        } else {
+            localStorage.removeItem("token");
+        }
+    };
+
+    const contextValue = useMemo(
+        () => ({
+            token,
+            setToken,
+        }),
+        [token]
+    );
+
+    return (
+        <AuthContext.Provider value={contextValue}>
+            {children}
+        </AuthContext.Provider>
+    );
+};
+
+export const useAuth = () => {
+    return useContext(AuthContext);
+};
+
+export default AuthProvider;
+```
+
+--- FILE: frontend/src/routes/ProtectedRoute.jsx ---
+```
+import { Navigate, Outlet } from "react-router";
+import { useAuth } from "../provider/authProvider";
+export const ProtectedRoute = () => {
+    const { token } = useAuth();
+    // Check if the user is authenticated
+    if (!token) {
+        // If not authenticated, redirect to the login page
+        return <Navigate to="/login" replace />;
+    }
+    // If authenticated, render the child routes (e.g., Home, Inventory)
+    return <Outlet />;
+};
 
 ```
 
@@ -5021,6 +5190,91 @@ Write-Output "MVN_CMD=$MAVEN_HOME/bin/$MVN_CMD"
 
 ```
 
+--- FILE: README.md ---
+```
+# Bookstore Admin - JWT & React Integration
+
+## Introduction
+
+This repository contains the starting codebase and in-class exercise for **[Lecture 2.12 CSD230 W26 V3 : Securing the Bookstore (JWT + React Integration)](https://docs.google.com/document/d/1busZdk3_fRobhRXB28Lgzw3ROjyC8ZvVpefSgqOO6tk/edit?usp=sharing)**.
+
+**Please refer to the lecture document linked above for the complete, step-by-step instructions and code modifications required to complete this exercise.**
+
+### What this App Does
+The Bookstore Admin application is a full-stack project featuring a Spring Boot REST API backend (connected to a MySQL database) and a React (Vite) frontend. It allows administrators to manage a digital bookstore inventory—including adding, editing, and deleting books and magazines—and simulates a shopping cart experience.
+
+In this exercise, we take the existing unsecured application and lock it down by implementing JSON Web Token (JWT) authentication. We secure the backend API endpoints and build a complete login/logout flow on the React frontend, utilizing React Router v7 and Axios interceptors to ensure that only authenticated users can access the inventory management features.
+
+---
+
+## Running the Application
+
+### Backend (Spring Boot)
+1. Ensure your Docker MySQL container is running.
+2. Run `Application.java` from your Backend IntelliJ window.
+3. The API server will start on `http://localhost:8080`.
+
+### Frontend (React/Vite)
+1. Open the terminal in your Frontend IntelliJ window (inside the `frontend` folder).
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
+3. Open the provided local URL (usually `http://localhost:5173/`) in your browser to view the application.
+```
+
+---
+
+## Running the Application
+
+### **Prerequisites**
+Before starting either side of the application, ensure your MySQL database is running via Docker:
+```bash
+docker-compose up -d
+```
+
+---
+
+### **1. Running from the Command Line (CLI)**
+
+#### **Backend (Spring Boot)**
+Open a terminal in the **root** folder of the project:
+*   **Windows:**
+    ```cmd
+    mvnw.cmd spring-boot:run
+    ```
+*   **macOS / Linux:**
+    ```bash
+    ./mvnw spring-boot:run
+    ```
+
+#### **Frontend (React/Vite)**
+Open a second terminal window and navigate to the `frontend` folder:
+```bash
+cd frontend
+npm install   # Only needed the first time
+npm run dev
+```
+
+---
+
+### **2. Running from IntelliJ IDEA**
+
+#### **Backend (Spring Boot)**
+1.  Open the **root project folder** in IntelliJ.
+2.  In the Project window, navigate to: `src/main/java/csd230/bookstore/Application.java`.
+3.  Right-click the `Application` class and select **Run 'Application'**.
+4.  Alternatively, open the **Maven** tool window (usually on the right), expand `Application > Plugins > spring-boot`, and double-click `spring-boot:run`.
+
+#### **Frontend (React/Vite)**
+1.  Open the **`frontend` sub-folder** in a separate IntelliJ window (as per the dual-window setup).
+2.  Open the `package.json` file.
+3.  Look for the `"scripts"` section and click the **green Play button** in the gutter next to the `"dev": "vite"` line.
+4.  Select **Run 'dev'**.
+5.  Check the **Terminal** tab at the bottom of IntelliJ to see the local URL (usually `http://localhost:5173/`).
+
+```
+
 --- FILE: src/main/java/csd230/bookstore/Application.java ---
 ```
 package csd230.bookstore;
@@ -5408,9 +5662,12 @@ public class WebSecurityConfig {
 //                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/rest/**").hasAnyRole("USER", "ADMIN")
 //                        .requestMatchers("/api/rest/**").hasRole("ADMIN")
 // Temporarily open for Lecture 2.11.2. Will secure in future JWT lecture.
-                        .requestMatchers("/api/rest/**").permitAll()
+//                        .requestMatchers("/api/rest/**").permitAll()
+// Secure the REST API. Only authenticated users with roles can access it.
+                        .requestMatchers("/api/rest/**").hasAnyRole("USER", "ADMIN")
 
-                        // 4. Web UI Admin
+
+                                // 4. Web UI Admin
                         .requestMatchers("/books/add", "/books/edit/**", "/books/delete/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
