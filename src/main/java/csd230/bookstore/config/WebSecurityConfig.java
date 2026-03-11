@@ -48,9 +48,12 @@ public class WebSecurityConfig {
 //                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/rest/**").hasAnyRole("USER", "ADMIN")
 //                        .requestMatchers("/api/rest/**").hasRole("ADMIN")
 // Temporarily open for Lecture 2.11.2. Will secure in future JWT lecture.
-                        .requestMatchers("/api/rest/**").permitAll()
+//                        .requestMatchers("/api/rest/**").permitAll()
+// Secure the REST API. Only authenticated users with roles can access it.
+                        .requestMatchers("/api/rest/**").hasAnyRole("USER", "ADMIN")
 
-                        // 4. Web UI Admin
+
+                                // 4. Web UI Admin
                         .requestMatchers("/books/add", "/books/edit/**", "/books/delete/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
