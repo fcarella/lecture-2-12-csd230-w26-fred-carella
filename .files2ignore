@@ -3,6 +3,9 @@ ai_prompt*
 volumes/
 Timeline*.json
 assets/
+package-lock.json
+*.svg
+mvnw.*
 
 node_modules/
 target/
